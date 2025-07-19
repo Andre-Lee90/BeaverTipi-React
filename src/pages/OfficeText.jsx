@@ -1,9 +1,10 @@
-import React from 'react'
+import OfficeInfoMain from "../components/myOfficeInfo/OfficeInfoMain";
 
-function OfficeText() {
+export default function OfficeText() {
   return (
-    <div>OfficeText</div>
-  )
+    <div>
+      {}
+      <OfficeInfoMain />
+    </div>
+  );
 }
-
-export default OfficeText

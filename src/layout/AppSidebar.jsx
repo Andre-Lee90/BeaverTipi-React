@@ -29,7 +29,7 @@ const navItems = [
     name: "오피스 관리",
     subItems: [
       { name: "사무소 정보", path: "/broker/myoffice/info/text", pro: false }
-      , { name: "지도 UI", path: "/broker/myoffice/info/map", pro: false }],
+    ],
   },
   {
     icon: <PageIcon />,
