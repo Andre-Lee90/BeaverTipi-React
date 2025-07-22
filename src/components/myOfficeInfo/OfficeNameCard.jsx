@@ -1,6 +1,10 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import NameCardPreview from "./nameCard/NameCardPreview";
-import NameCardList from "./nameCard/NameCardList";
+import NameCardCarousel from "./nameCard/NameCardCarousel";
+import axios from "axios";
+import html2canvas from "html2canvas";
+import Swal from "sweetalert2";
+import Input from "../form/input/InputField";
 
 const templates = [
   { id: 1, name: "블루", color: "#3a5dfb" },
@@ -16,6 +20,7 @@ const textColors = [
 ];
 
 export default function OfficeNameCard() {
+  const [profiles, setProfiles] = useState([]);
   const [form, setForm] = useState({
     bigTitle: "",
     smallTitle: "",
@@ -24,15 +29,80 @@ export default function OfficeNameCard() {
     content3: "",
     template: templates[0].id,
     bgImageUrl: "",
-    profileUrl: "",
-    textColor: "#222",
-    profilePos: { x: 200, y: 40 },
-    profileSize: 128,
-    profileShape: "circle"
+    textColor: "#222"
   });
-
   const [editTarget, setEditTarget] = useState(null);
+  const [refresh, setRefresh] = useState(false);
+  const [mbrCd, setMbrCd] = useState("");
+  const [nameCards, setNameCards] = useState([]);
+  const [mainNameCardId, setMainNameCardId] = useState(null);
+  const [fontBigSize, setFontBigSize] = useState(24);
+  const [bigTitlePos, setBigTitlePos] = useState({ x: 16, y: 16 });
+  const previewRef = useRef();
 
+  useEffect(() => {
+    axios.get("/rest/broker/namecard/user").then(res => {
+      setMbrCd(res.data.mbrCd);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (mbrCd) {
+      axios.get(`/rest/broker/namecard/list/${mbrCd}`).then(res => {
+        setNameCards(Array.isArray(res.data) ? res.data : []);
+        const mainCard = (Array.isArray(res.data) ? res.data : []).find(card => card.docTypeCd === "NAMECARD_MAIN");
+        setMainNameCardId(mainCard?.fileId || null);
+      });
+    }
+  }, [mbrCd, refresh]);
+
+  // 삭제: Swal 적용
+  const handleDelete = async (fileId, fileAttachSeq) => {
+    const confirm = await Swal.fire({
+      title: '명함을 삭제할까요?',
+      text: '삭제하면 되돌릴 수 없어요.',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: '삭제',
+      cancelButtonText: '취소',
+      confirmButtonColor: '#d33'
+    });
+    if (!confirm.isConfirmed) return;
+
+    try {
+      const res = await axios.delete('/rest/broker/namecard/delete', {
+        params: { fileId, fileAttachSeq }
+      });
+      if (res.data.result === "success") {
+        await Swal.fire('삭제 완료!', '명함이 삭제되었습니다.', 'success');
+        setRefresh(v => !v);
+      } else {
+        Swal.fire('삭제 실패', res.data.message || '문제가 발생했어요', 'error');
+      }
+    } catch (e) {
+      Swal.fire('삭제 에러', e.message, 'error');
+    }
+  };
+
+  // 대표명함 지정: Swal 적용
+  const handleSetMain = async (fileId) => {
+    if (!fileId) return;
+    try {
+      const res = await axios.post('/rest/broker/namecard/set-main', null, {
+        params: { nameCardId: fileId }
+      });
+      if (res.data.result === "success") {
+        await Swal.fire('대표명함!', '대표명함으로 지정되었습니다!', 'success');
+        setRefresh(v => !v);
+      } else {
+        Swal.fire('대표명함 지정 실패', res.data.message, 'error');
+      }
+    } catch (e) {
+      Swal.fire('대표명함 지정 오류', e.message, 'error');
+    }
+  };
+
+  // 입력/툴 핸들러
   const handleChange = (e) => {
     const { name, value } = e.target;
     setForm(prev => ({ ...prev, [name]: value }));
@@ -45,30 +115,86 @@ export default function OfficeNameCard() {
       bgImageUrl: URL.createObjectURL(file)
     }));
   };
+  // ⭐️ 프로필 여러장 업로드
   const handleProfileUpload = (e) => {
     const file = e.target.files[0];
-    if (file) setForm(prev => ({
+    if (!file) return;
+    const url = URL.createObjectURL(file);
+    setProfiles(prev => [
       ...prev,
-      profileUrl: URL.createObjectURL(file)
-    }));
+      {
+        url,
+        pos: { x: 40 + prev.length * 40, y: 40 },
+        size: 90,
+        shape: "circle"
+      }
+    ]);
+    e.target.value = "";
   };
-  const handleTextColor = (color) => setForm(prev => ({ ...prev, textColor: color }));
-  const handleProfileShape = shape => setForm(f => ({ ...f, profileShape: shape }));
-  const handleProfilePosChange = (pos) => setForm(f => ({ ...f, profilePos: pos }));
-  const handleProfileSizeChange = (size) => setForm(f => ({ ...f, profileSize: size }));
+  // ⭐️ 프로필 삭제
+  const handleProfileDelete = idx =>
+    setProfiles(prev => prev.filter((_, i) => i !== idx));
+  // ⭐️ 프로필 이동/크기/쉐입
+  const handleProfileUpdate = (idx, data) =>
+    setProfiles(prev => prev.map((p, i) => i === idx ? { ...p, ...data } : p));
+  const handleProfileShape = shape => {
+    if (!profiles.length) return;
+    setProfiles(prev => prev.map((p, i) => (i === prev.length - 1 ? { ...p, shape } : p)));
+  };
 
-  const handleSave = () => { alert("저장! (API 연동 예정)"); };
-  const handleDownload = () => { alert("다운받기! (API 연동 예정)"); };
+  // 저장: Swal 적용
+  const handleSave = async () => {
+    if (!previewRef.current) {
+      await Swal.fire('오류', "미리보기 없음!", "error");
+      return;
+    }
+    const canvas = await html2canvas(previewRef.current);
+    canvas.toBlob(async (blob) => {
+      if (!blob) {
+        await Swal.fire('오류', "이미지 변환 실패!", "error");
+        return;
+      }
+      const file = new File([blob], "namecard.png", { type: "image/png" });
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("sourceRef", "BROKER");
+      formData.append("sourceId", mbrCd);
+      formData.append("docTypeCd", "NAMECARD");
+
+      try {
+        const res = await axios.post("/rest/broker/namecard/save", formData, {
+          headers: { "Content-Type": "multipart/form-data" },
+        });
+        if (res.data.result === "success") {
+          await Swal.fire('저장 성공!', '명함이 저장되었습니다.', 'success');
+          setRefresh(v => !v);
+        } else {
+          Swal.fire('저장 실패', res.data.message, 'error');
+        }
+      } catch (err) {
+        Swal.fire('오류', err.message, 'error');
+      }
+    }, "image/png");
+  };
 
   const handleEdit = (card) => {
     setForm({
       ...form,
-      ...card,
-      profilePos: card.profilePos || { x: 200, y: 40 },
-      profileSize: card.profileSize || 128,
-      profileShape: card.profileShape || "circle"
+      ...card
     });
     setEditTarget(card.fileId || null);
+  };
+
+  const handleDownload = async () => {
+    if (!previewRef.current) {
+      await Swal.fire('오류', "명함 미리보기 영역을 찾을 수 없습니다", "error");
+      return;
+    }
+    const canvas = await html2canvas(previewRef.current);
+    const link = document.createElement("a");
+    link.download = "namecard.png";
+    link.href = canvas.toDataURL("image/png");
+    link.click();
   };
 
   const grayInput = {
@@ -106,11 +232,12 @@ export default function OfficeNameCard() {
         }
         `}
       </style>
-      {/* 명함 미리보기 */}
+
       <div style={{ margin: "36px 0 28px 0" }}>
         <NameCardPreview
-          width={440}
-          height={230}
+          ref={previewRef}
+          width={360}
+          height={200}
           bigTitle={form.bigTitle}
           smallTitle={form.smallTitle}
           content1={form.content1}
@@ -118,34 +245,28 @@ export default function OfficeNameCard() {
           content3={form.content3}
           color={templates.find(t => t.id === form.template)?.color}
           bgImage={form.bgImageUrl}
-          profileImg={form.profileUrl}
-          profilePos={form.profilePos}
-          profileSize={form.profileSize}
-          profileShape={form.profileShape}
-          onProfilePosChange={handleProfilePosChange}
-          onProfileSizeChange={handleProfileSizeChange}
+          profiles={profiles}
+          onProfileDelete={handleProfileDelete}
+          onProfileUpdate={handleProfileUpdate}
           textColor={form.textColor}
-          
+          fontBigSize={fontBigSize}
+          onFontBigSizeChange={setFontBigSize}
+          bigTitlePos={bigTitlePos}
+          onBigTitlePosChange={setBigTitlePos}
         />
       </div>
-      {/* 한 줄 툴바 */}
+
       <div className="namecard-toolbar">
         <div className="namecard-toolbar__item">
           <span className="namecard-toolbar__label">명함색상</span>
           {templates.map(t => (
-            <button
-              key={t.id}
-              onClick={() => handleTemplate(t.id)}
+            <button key={t.id} onClick={() => handleTemplate(t.id)}
               style={{
                 width: 32, height: 32,
                 background: t.color,
                 border: form.template === t.id ? "2.5px solid #222" : "1.5px solid #bbb",
-                borderRadius: 8,
-                outline: "none",
-                cursor: "pointer"
-              }}
-              aria-label={t.name}
-            />
+                borderRadius: 8, outline: "none", cursor: "pointer"
+              }} aria-label={t.name} />
           ))}
         </div>
         <div className="namecard-toolbar__item">
@@ -158,8 +279,7 @@ export default function OfficeNameCard() {
             <img src={form.bgImageUrl} alt="bg" style={{
               width: 30, height: 30, borderRadius: 6,
               objectFit: "cover", border: "1.5px solid #ccc", marginLeft: 2
-            }} />
-          }
+            }} />}
         </div>
         <div className="namecard-toolbar__item">
           <span className="namecard-toolbar__label">프로필</span>
@@ -167,51 +287,28 @@ export default function OfficeNameCard() {
             사진 불러오기
             <input type="file" accept="image/*" onChange={handleProfileUpload} style={{ display: "none" }} />
           </label>
-          {form.profileUrl &&
-            <img src={form.profileUrl} alt="profile" style={{
-              width: 30, height: 30,
-              borderRadius: form.profileShape === "circle" ? "50%" : "6px",
-              objectFit: "cover", border: "1.5px solid #ccc", marginLeft: 2
-            }} />
-          }
-          <button
-            style={{
-              border: form.profileShape === "circle" ? "2px solid #3a5dfb" : "1px solid #aaa",
-              borderRadius: "50%", width: 26, height: 26, marginLeft: 7, fontSize: 15
-            }}
-            onClick={() => handleProfileShape("circle")}
-            title="원형"
-          >●</button>
-          <button
-            style={{
-              border: form.profileShape === "rect" ? "2px solid #3a5dfb" : "1px solid #aaa",
-              borderRadius: 6, width: 26, height: 26, marginLeft: 3, fontSize: 15
-            }}
-            onClick={() => handleProfileShape("rect")}
-            title="사각"
-          >■</button>
+          <button style={{
+            border: profiles.length && profiles[profiles.length - 1].shape === "circle" ? "2px solid #3a5dfb" : "1px solid #aaa",
+            borderRadius: "50%", width: 26, height: 26, marginLeft: 7, fontSize: 15
+          }} onClick={() => handleProfileShape("circle")} title="원형">●</button>
+          <button style={{
+            border: profiles.length && profiles[profiles.length - 1].shape === "rect" ? "2px solid #3a5dfb" : "1px solid #aaa",
+            borderRadius: 6, width: 26, height: 26, marginLeft: 3, fontSize: 15
+          }} onClick={() => handleProfileShape("rect")} title="사각">■</button>
         </div>
       </div>
-      {/* 텍스트 색상 */}
+
       <div style={{ marginBottom: 16, width: 350, display: "flex", gap: 16, alignItems: "center" }}>
         <span style={{ fontWeight: 600, fontSize: 15 }}>텍스트 색상</span>
         {textColors.map(tc => (
-          <button
-            key={tc.code}
-            style={{
-              width: 28, height: 28,
-              background: tc.code,
-              border: form.textColor === tc.code ? "2.5px solid #4260ff" : "1.5px solid #bbb",
-              borderRadius: "50%",
-              outline: "none", cursor: "pointer"
-            }}
-            title={tc.name}
-            aria-label={tc.name}
-            onClick={() => handleTextColor(tc.code)}
-          />
+          <button key={tc.code} style={{
+            width: 28, height: 28, background: tc.code,
+            border: form.textColor === tc.code ? "2.5px solid #4260ff" : "1.5px solid #bbb",
+            borderRadius: "50%", outline: "none", cursor: "pointer"
+          }} title={tc.name} onClick={() => handleTextColor(tc.code)} />
         ))}
       </div>
-      {/* 입력칸 */}
+
       <div style={{
         display: "grid",
         gridTemplateColumns: "1fr 1fr",
@@ -219,48 +316,13 @@ export default function OfficeNameCard() {
         marginBottom: 14,
         width: 670
       }}>
-        <input
-          name="bigTitle"
-          value={form.bigTitle}
-          onChange={handleChange}
-          style={grayInput}
-          placeholder="큰제목 (이름 등)"
-          maxLength={18}
-        />
-        <input
-          name="smallTitle"
-          value={form.smallTitle}
-          onChange={handleChange}
-          style={grayInput}
-          placeholder="작은제목 (회사 등)"
-          maxLength={18}
-        />
-        <input
-          name="content1"
-          value={form.content1}
-          onChange={handleChange}
-          style={grayInput}
-          placeholder="내용1 (전화번호)"
-          maxLength={24}
-        />
-        <input
-          name="content2"
-          value={form.content2}
-          onChange={handleChange}
-          style={grayInput}
-          placeholder="내용2 (이메일/주소/직책 등)"
-          maxLength={24}
-        />
-        <input
-          name="content3"
-          value={form.content3}
-          onChange={handleChange}
-          style={grayInput}
-          placeholder="내용3 (이메일/주소/직책 등)"
-          maxLength={24}
-        />
+        <Input name="bigTitle" value={form.bigTitle} onChange={handleChange} style={grayInput} placeholder="큰제목 (이름 등)" maxLength={18} />
+        <Input name="smallTitle" value={form.smallTitle} onChange={handleChange} style={grayInput} placeholder="작은제목 (회사 등)" maxLength={18} />
+        <Input name="content1" value={form.content1} onChange={handleChange} style={grayInput} placeholder="내용1 (전화번호)" maxLength={24} />
+        <Input name="content2" value={form.content2} onChange={handleChange} style={grayInput} placeholder="내용2 (이메일/주소/직책 등)" maxLength={24} />
+        <Input name="content3" value={form.content3} onChange={handleChange} style={grayInput} placeholder="내용3 (이메일/주소/직책 등)" maxLength={24} />
       </div>
-      {/* 저장/다운 버튼 */}
+
       <div style={{
         display: "flex",
         gap: 18,
@@ -268,55 +330,31 @@ export default function OfficeNameCard() {
         marginTop: 4,
         width: 320
       }}>
-        <button
-          onClick={handleDownload}
-          style={{
-            width: 140,
-            background: "#ececec",
-            color: "#3a5dfb",
-            fontWeight: 700,
-            borderRadius: 8,
-            border: "1.5px solid #bbb",
-            height: 40,
-            boxShadow: "0 2px 7px #5175fd13",
-            fontSize: 15,
-            letterSpacing: "1px",
-            transition: "filter .12s",
-            cursor: "pointer"
-          }}
-        >다운받기</button>
-        <button
-          onClick={handleSave}
-          style={{
-            width: 140,
-            background: "#ececec",
-            color: "#e33",
-            fontWeight: 800,
-            borderRadius: 8,
-            border: "1.5px solid #e33",
-            height: 40,
-            fontSize: 15,
-            letterSpacing: "1px",
-            boxShadow: "0 2px 7px #e3332a11",
-            transition: "filter .12s",
-            cursor: "pointer"
-          }}
-        >저장</button>
+        <button onClick={handleDownload} style={{
+          width: 140, background: "#ececec", color: "#3a5dfb",
+          fontWeight: 700, borderRadius: 8, border: "1.5px solid #bbb",
+          height: 40, fontSize: 15, letterSpacing: "1px",
+          boxShadow: "0 2px 7px #5175fd13", cursor: "pointer"
+        }}>다운받기</button>
+        <button onClick={handleSave} style={{
+          width: 140, background: "#ececec", color: "#e33",
+          fontWeight: 800, borderRadius: 8, border: "1.5px solid #e33",
+          height: 40, fontSize: 15, letterSpacing: "1px",
+          boxShadow: "0 2px 7px #e3332a11", cursor: "pointer"
+        }}>저장</button>
       </div>
-      {/* 캐러셀/명함 목록 */}
-      <div style={{
-        width: "100%",
-        maxWidth: 900,
-        margin: "30px 0 0 0",
-        display: "flex",
-        justifyContent: "center"
-      }}>
-        <NameCardList
-          onSelect={handleEdit}
-          onDelete={(fileId) => alert(`명함 [${fileId}] 삭제! (실제 API 연동)`) }
-        />
+
+      <div style={{ width: "100%", maxWidth: 900, margin: "30px 0 0 0", display: "flex", justifyContent: "center" }}>
+        {mbrCd &&
+          <NameCardCarousel
+            cards={nameCards}
+            onSetMain={handleSetMain}
+            mainNameCardId={mainNameCardId}
+            onDelete={handleDelete}
+          />
+        }
       </div>
-      {/* 안내/도움말 */}
+
       <div style={{
         marginTop: 18, fontSize: 14, color: "#7a88a9", textAlign: "center"
       }}>

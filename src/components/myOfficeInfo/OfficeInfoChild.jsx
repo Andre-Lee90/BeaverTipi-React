@@ -1,11 +1,10 @@
-import React from 'react';
+import React from "react";
+import NameCardPreviewBox from "./myOfficeInfoChildBox/NameCardPreviewBox";
 
-export default function OfficeInfoMainForm() {
+export default function OfficeInfoChild({ onEditTabMove }) {
   return (
-    <div style={{ padding: 20 }}>
-      <h2>사무소 정보</h2>
-      <p>여기에 사무소 정보를 입력하거나, 불러올 수 있습니다.</p>
-      {/* 폼/입력/수정 등 원하는 UI 추가! */}
+    <div style={{ display: "flex", gap: 20, padding: 20 }}>
+      <NameCardPreviewBox onEditClick={onEditTabMove} />
     </div>
   );
 }

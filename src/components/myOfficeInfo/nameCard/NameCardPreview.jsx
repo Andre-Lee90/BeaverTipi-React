@@ -1,9 +1,15 @@
-// src/components/myOfficeInfo/nameCard/NameCardPreview.jsx
-import React, { useRef } from "react";
+import React, { useRef, useState } from "react";
 
-export default function NameCardPreview({
-  width = 440,
-  height = 230,
+// 프리뷰 props:
+// width, height, bigTitle, smallTitle, content1~3, color, bgImage, profileImg, profilePos, profileSize, profileShape, textColor
+const defaultProfilePos = { x: 200, y: 40 };
+const defaultProfileSize = 128;
+
+const clamp = (val, min, max) => Math.max(min, Math.min(max, val));
+
+export default React.forwardRef(function NameCardPreview({
+  width = 360,
+  height = 200,
   bigTitle,
   smallTitle,
   content1,
@@ -12,137 +18,213 @@ export default function NameCardPreview({
   color = "#3a5dfb",
   bgImage,
   profileImg,
-  profilePos = { x: 200, y: 40 },
-  profileSize = 128,
+  profilePos = defaultProfilePos,
+  profileSize = defaultProfileSize,
   profileShape = "circle",
   textColor = "#222",
   onProfilePosChange,
   onProfileSizeChange,
-}) {
-  const dragMove = useRef(false);
-  const dragResize = useRef(false);
+}, ref) {
+  const [dragging, setDragging] = useState(false);
+  const [dragStart, setDragStart] = useState(null);
+  const profileRef = useRef();
 
-  const handleMoveMouseDown = (e) => {
-    e.stopPropagation();
-    dragMove.current = true;
-    const startX = e.clientX;
-    const startY = e.clientY;
-    const { x, y } = profilePos;
-    const onMouseMove = (moveEvt) => {
-      if (!dragMove.current) return;
-      const diffX = moveEvt.clientX - startX;
-      const diffY = moveEvt.clientY - startY;
-      onProfilePosChange?.({ x: x + diffX, y: y + diffY });
-    };
-    const onMouseUp = () => {
-      dragMove.current = false;
-      window.removeEventListener("mousemove", onMouseMove);
-      window.removeEventListener("mouseup", onMouseUp);
-    };
-    window.addEventListener("mousemove", onMouseMove);
-    window.addEventListener("mouseup", onMouseUp);
+  // 드래그 이동
+  const handleProfileMouseDown = e => {
+    if (!profileRef.current) return;
+    e.preventDefault();
+    setDragging(true);
+    setDragStart({
+      x: e.clientX,
+      y: e.clientY,
+      pos: { ...profilePos }
+    });
+    window.addEventListener("mousemove", handleProfileMouseMove);
+    window.addEventListener("mouseup", handleProfileMouseUp);
+  };
+  const handleProfileMouseMove = e => {
+    if (!dragging || !dragStart) return;
+    const dx = e.clientX - dragStart.x;
+    const dy = e.clientY - dragStart.y;
+    const newX = clamp(dragStart.pos.x + dx, 0, width - profileSize);
+    const newY = clamp(dragStart.pos.y + dy, 0, height - profileSize);
+    onProfilePosChange && onProfilePosChange({ x: newX, y: newY });
+  };
+  const handleProfileMouseUp = () => {
+    setDragging(false);
+    setDragStart(null);
+    window.removeEventListener("mousemove", handleProfileMouseMove);
+    window.removeEventListener("mouseup", handleProfileMouseUp);
   };
 
-  const handleResizeMouseDown = (e) => {
+  // 프로필 크기 조절
+  const handleResizeMouseDown = e => {
+    e.preventDefault();
     e.stopPropagation();
-    dragResize.current = true;
-    const startX = e.clientX;
-    const startSize = profileSize;
-    const onMouseMove = (moveEvt) => {
-      if (!dragResize.current) return;
-      const diff = moveEvt.clientX - startX;
-      const newSize = Math.max(40, startSize + diff);
-      onProfileSizeChange?.(newSize);
-    };
-    const onMouseUp = () => {
-      dragResize.current = false;
-      window.removeEventListener("mousemove", onMouseMove);
-      window.removeEventListener("mouseup", onMouseUp);
-    };
-    window.addEventListener("mousemove", onMouseMove);
-    window.addEventListener("mouseup", onMouseUp);
+    setDragging("resize");
+    setDragStart({
+      x: e.clientX,
+      y: e.clientY,
+      size: profileSize
+    });
+    window.addEventListener("mousemove", handleResizeMouseMove);
+    window.addEventListener("mouseup", handleResizeMouseUp);
+  };
+  const handleResizeMouseMove = e => {
+    if (dragging !== "resize" || !dragStart) return;
+    const d = e.clientX - dragStart.x + e.clientY - dragStart.y;
+    const newSize = clamp(dragStart.size + d, 40, 170);
+    onProfileSizeChange && onProfileSizeChange(newSize);
+  };
+  const handleResizeMouseUp = () => {
+    setDragging(false);
+    setDragStart(null);
+    window.removeEventListener("mousemove", handleResizeMouseMove);
+    window.removeEventListener("mouseup", handleResizeMouseUp);
   };
 
   return (
     <div
+      ref={ref}
       style={{
-        position: "relative",
         width,
         height,
-        background: bgImage ? `url(${bgImage}) center/cover` : color,
-        borderRadius: 12,
-        boxShadow: "0 4px 24px rgba(0,0,0,0.1)",
-        overflow: "visible",
-      }}
-    >
-        {/* ① 텍스트 영역 */}
-        <div style={{ padding: 16, color: textColor }}>
-        <h2 style={{ margin: 0, fontSize: 24 }}>{bigTitle || "홍길동"}</h2>
-        <h4 style={{ margin: "4px 0", fontSize: 16 }}>{smallTitle || "회사명/직책"}</h4>
-        <p style={{ margin: "8px 0 0", fontSize: 14 }}>{content1 || "010-1234-5678"}</p>
-        <p style={{ margin: "4px 0 0", fontSize: 14 }}>{content2 || "email@example.com"}</p>
-        <p style={{ margin: "4px 0 0", fontSize: 14 }}>{content3 || "주소/기타 정보"}</p>
-        </div>
-
-{profileImg && (
-  <div
-    onMouseDown={handleMoveMouseDown}
-    style={{
-      position: "absolute",
-      left: profilePos.x,
-      top: profilePos.y,
-      cursor: "move",
-    }}
-  >
-    {/* 이미지 영역 (클립) */}
-    <div
-      style={{
-        width: profileSize,
-        height: profileSize,
-        borderRadius: profileShape === "circle" ? "50%" : 8,
+        background: color,
+        borderRadius: 24,
+        boxShadow: "0 4px 36px #4671ee19",
+        position: "relative",
         overflow: "hidden",
-        boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
-      }}
-    >
-      <img
-        src={profileImg}
-        alt="profile"
-        draggable={false}
-        style={{
-          width: "100%",
-          height: "100%",
-          objectFit: "cover",
-          userSelect: "none",
-          pointerEvents: "none",
-        }}
-      />
-    </div>
-    {/* 사이즈 조절 핸들 */}
-    <div
-      onMouseDown={handleResizeMouseDown}
-      style={{
-        position: "absolute",
-        right: -8,
-        bottom: -8,
-        width: 16,
-        height: 16,
-        background: "#fff",
-        border: "2px solid #3a5dfb",
-        borderRadius: 4,
-        cursor: "nwse-resize",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        fontSize: 12,
-        color: "#3a5dfb",
         userSelect: "none",
+        display: "flex",
+        flexDirection: "column",
+        justifyContent: "center",
+        alignItems: "center",
       }}
     >
-      ↔
-    </div>
-  </div>
-)}
+      {/* 배경 이미지 */}
+      {bgImage && (
+        <img
+          src={bgImage}
+          alt="bg"
+          style={{
+            position: "absolute",
+            width: "100%",
+            height: "100%",
+            left: 0,
+            top: 0,
+            objectFit: "cover",
+            opacity: 0.9,
+            zIndex: 0,
+            borderRadius: 24,
+          }}
+        />
+      )}
 
+      {/* 프로필 이미지 */}
+      {profileImg && (
+        <div
+          ref={profileRef}
+          style={{
+            position: "absolute",
+            left: profilePos.x,
+            top: profilePos.y,
+            width: profileSize,
+            height: profileSize,
+            zIndex: 2,
+            cursor: dragging ? "grabbing" : "grab",
+            borderRadius: profileShape === "circle" ? "50%" : "14px",
+            overflow: "hidden",
+            boxShadow: "0 2px 12px #1a233655",
+            border: "3px solid #fff"
+          }}
+          onMouseDown={handleProfileMouseDown}
+        >
+          <img
+            src={profileImg}
+            alt="profile"
+            draggable={false}
+            style={{
+              width: "100%",
+              height: "100%",
+              objectFit: "cover",
+              borderRadius: profileShape === "circle" ? "50%" : "14px"
+            }}
+          />
+          {/* 크기조절 핸들 */}
+          <div
+            style={{
+              position: "absolute",
+              right: -8,
+              bottom: -8,
+              width: 23,
+              height: 23,
+              background: "#fff",
+              borderRadius: "50%",
+              border: "2px solid #4671ee",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              cursor: "nwse-resize",
+              zIndex: 5,
+              boxShadow: "0 1px 7px #aaa3"
+            }}
+            onMouseDown={handleResizeMouseDown}
+          >
+            <svg width="12" height="12" viewBox="0 0 14 14">
+              <polyline points="1,13 13,1" stroke="#4671ee" strokeWidth="2" fill="none" />
+              <circle cx="13" cy="1" r="1.3" fill="#4671ee" />
+            </svg>
+          </div>
+        </div>
+      )}
+
+      {/* 텍스트 */}
+      <div
+        style={{
+          width: "88%",
+          height: "88%",
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "center",
+          zIndex: 1,
+          position: "relative",
+        }}
+      >
+        <div style={{
+          fontSize: 28,
+          fontWeight: 800,
+          color: textColor,
+          textAlign: "center",
+          letterSpacing: "-1px",
+          marginBottom: 6,
+          textShadow: "0 1px 12px #fff8",
+        }}>
+          {bigTitle || "큰제목"}
+        </div>
+        <div style={{
+          fontSize: 18,
+          fontWeight: 500,
+          color: textColor,
+          opacity: 0.92,
+          textAlign: "center",
+          marginBottom: 8
+        }}>
+          {smallTitle || "작은제목"}
+        </div>
+        {[content1, content2, content3].map(
+          (c, i) => c ? (
+            <div key={i} style={{
+              fontSize: 15,
+              color: textColor,
+              textAlign: "center",
+              opacity: 0.92,
+              marginTop: 3
+            }}>
+              {c}
+            </div>
+          ) : null
+        )}
+      </div>
     </div>
   );
-}
+});

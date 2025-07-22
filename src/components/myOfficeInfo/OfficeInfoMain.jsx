@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import OfficeInfo from './OfficeInfoChild.jsx';
 import OfficeNameCard from './OfficeNameCard.jsx';
-import OfficeMap from './OfficeMap.jsx';
+import OfficeInfoMap from './OfficeInfoMap.jsx';
+
 
 const TABS = [
   { key: 'info', label: '사무소정보' },
@@ -35,9 +36,10 @@ export default function OfficeInfoMain() {
         ))}
       </div>
       <div>
-        {tab === 'info' && <OfficeInfo />}
+        {tab === 'info' && <OfficeInfo onEditTabMove={() => setTab('card')} />}
         {tab === 'card' && <OfficeNameCard />}
-        {tab === 'map' && <OfficeMap />}
+        {tab === 'map' && <OfficeInfoMap />}
+        
       </div>
     </div>
   );
