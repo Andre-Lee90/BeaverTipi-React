@@ -135,7 +135,6 @@ export default function NameCardList({ mbrCd, onSelect, onDelete, refresh }) {
                   onClick={e => {
                     e.stopPropagation();
                     onDelete && onDelete(card.fileId);
-                    console.log("삭제버튼", fileId, fileAttachSeq);
                   }}
                 >
                   <svg width="12" height="12" viewBox="0 0 12 12">
@@ -158,9 +157,7 @@ export default function NameCardList({ mbrCd, onSelect, onDelete, refresh }) {
                   onClick={e => {
                     e.stopPropagation();
                     handleSetMain(card.fileId);
-                    console.log("대표지정", fileId);
                   }}
-                  
                   style={{
                     marginTop: 7,
                     padding: "4px 12px",
@@ -173,14 +170,11 @@ export default function NameCardList({ mbrCd, onSelect, onDelete, refresh }) {
                     fontWeight: 600,
                     transition: "background 0.18s, color 0.18s"
                   }}
-                  
                 >
                   대표로 지정
                 </button>
-                
               )}
             </div>
-            
           );
         })}
       </div>

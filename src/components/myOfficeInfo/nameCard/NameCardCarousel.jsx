@@ -1,116 +1,161 @@
-// src/components/myOfficeInfo/nameCard/NameCardCarousel.jsx
 import React, { useState } from "react";
 
-export default function NameCardCarousel({
-  cards = [],
-  onSelect,     // 카드 클릭시 호출 (선택/수정)
-  onDelete,     // 삭제 버튼
-  onSetMain,    // 대표 명함 설정 버튼
-  mainFileId    // 현재 대표명함 fileId
-}) {
-  const [current, setCurrent] = useState(0);
+// props: cards(명함목록), onSetMain(대표명함 변경 콜백), mainNameCardId(대표명함 fileId), onDelete(명함삭제 콜백)
+export default function NameCardCarousel({ cards = [], onSetMain, mainNameCardId, onDelete }) {
+  const [start, setStart] = useState(0);
+  const VISIBLE_COUNT = 4;
 
-  if (!cards.length) {
-    return (
-      <div style={{
-        width: 480, height: 260, display: "flex",
-        alignItems: "center", justifyContent: "center",
-        color: "#7a88a9", background: "#f8f9fb",
-        borderRadius: 12, fontSize: 16
-      }}>
-        저장된 명함이 없습니다.
-      </div>
-    );
-  }
+  const end = start + VISIBLE_COUNT;
+  const canPrev = start > 0;
+  const canNext = end < cards.length;
 
-  const currentCard = cards[current];
+  const handlePrev = () => {
+    if (canPrev) setStart(start - 1);
+  };
+  const handleNext = () => {
+    if (canNext) setStart(start + 1);
+  };
 
   return (
-    <div style={{
-      width: 480,
-      margin: "0 auto",
-      display: "flex",
-      flexDirection: "column",
-      alignItems: "center"
-    }}>
-      {/* 명함 미리보기 */}
+    <div style={{ display: "flex", alignItems: "center", gap: 12, width: "100%" }}>
+      <button
+        onClick={handlePrev}
+        disabled={!canPrev}
+        style={{
+          fontSize: 22,
+          background: "#fff",
+          border: "1px solid #ddd",
+          borderRadius: "50%",
+          width: 36, height: 36,
+          cursor: canPrev ? "pointer" : "not-allowed",
+          opacity: canPrev ? 1 : 0.3
+        }}
+      >&#8592;</button>
+
       <div style={{
-        width: 440,
-        height: 230,
-        margin: "0 auto",
-        borderRadius: 12,
-        boxShadow: "0 2px 16px #3332",
-        position: "relative",
-        background: "#fff"
+        display: "flex",
+        gap: 12,
+        flex: 1,
+        justifyContent: "center",
+        minWidth: 600
       }}>
-        <img
-          src={currentCard.url || currentCard.fileUrl}
-          alt="명함"
-          style={{
-            width: "100%",
-            height: "100%",
-            objectFit: "contain",
-            borderRadius: 12
-          }}
-          onClick={() => onSelect && onSelect(currentCard)}
-        />
-        {/* 대표 표시 */}
-        {mainFileId === currentCard.fileId && (
-          <span style={{
-            position: "absolute", top: 8, right: 12,
-            background: "#3a5dfb", color: "#fff",
-            borderRadius: 6, fontSize: 13, padding: "3px 9px"
-          }}>
-            대표
-          </span>
-        )}
+        {cards.slice(start, end).map(card => {
+          const isMain = card.fileId === mainNameCardId || card.docTypeCd === "NAMECARD_MAIN";
+          return (
+            <div
+              key={`${card.fileId}_${card.fileAttachSeq}`}
+              style={{
+                border: isMain ? "2.5px solid #3388ff" : "1px solid #ddd",
+                boxShadow: isMain ? "0 2px 10px #d3e7ff66" : "0 1px 4px #eaeaea80",
+                borderRadius: 14,
+                padding: 12,
+                width: 150,
+                height: 120,
+                background: "#f7f7fa",
+                textAlign: "center",
+                flexShrink: 0,
+                position: "relative",
+                transition: "border 0.2s, box-shadow 0.2s"
+              }}
+            >
+              {/* 삭제 버튼 */}
+              <button
+                style={{
+                  position: "absolute",
+                  top: 6, left: 7,
+                  width: 22, height: 22,
+                  border: "none",
+                  background: "#fff",
+                  borderRadius: "50%",
+                  boxShadow: "0 0 4px #7772",
+                  cursor: "pointer",
+                  zIndex: 11,
+                  display: "flex", alignItems: "center", justifyContent: "center"
+                }}
+                title="삭제"
+                onClick={e => {
+                  e.stopPropagation();
+                  onDelete && onDelete(card.fileId, card.fileAttachSeq);
+                }}
+              >
+                <svg width="12" height="12" viewBox="0 0 12 12">
+                  <line x1="2" y1="2" x2="10" y2="10" stroke="#d33" strokeWidth="2" />
+                  <line x1="10" y1="2" x2="2" y2="10" stroke="#d33" strokeWidth="2" />
+                </svg>
+              </button>
+
+              {isMain && (
+                <span
+                  style={{
+                    position: "absolute",
+                    top: 8, right: 10,
+                    background: "#3388ff",
+                    color: "#fff",
+                    borderRadius: 8,
+                    fontSize: 12,
+                    padding: "1px 10px",
+                    zIndex: 2,
+                    fontWeight: 600,
+                    boxShadow: "0 2px 8px #3388ff33"
+                  }}
+                >대표</span>
+              )}
+              <img
+                src={card.filePathUrl}
+                alt={card.fileOriginalname}
+                style={{
+                  width: 120, height: 56,
+                  objectFit: "cover",
+                  borderRadius: 6,
+                  border: isMain ? "2px solid #3388ff" : "1px solid #ccc"
+                }}
+              />
+              <div style={{
+                fontSize: 13,
+                marginTop: 6,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap"
+              }}>
+                {card.fileOriginalname}
+              </div>
+              {!isMain &&
+                <button
+                  onClick={() => onSetMain && onSetMain(card.fileId)}
+                  style={{
+                    marginTop: 7,
+                    padding: "4px 12px",
+                    fontSize: 13,
+                    borderRadius: 8,
+                    border: "1px solid #3388ff",
+                    background: "#fff",
+                    color: "#3388ff",
+                    cursor: "pointer",
+                    fontWeight: 600,
+                    transition: "background 0.18s, color 0.18s"
+                  }}
+                >
+                  대표로 지정
+                </button>
+              }
+            </div>
+          );
+        })}
       </div>
-      {/* 하단 컨트롤 */}
-      <div style={{ marginTop: 16, display: "flex", alignItems: "center", gap: 10 }}>
-        <button
-          disabled={current === 0}
-          onClick={() => setCurrent(c => Math.max(0, c - 1))}
-          style={{
-            width: 32, height: 32, borderRadius: "50%",
-            border: "1.5px solid #bbb", background: "#fff", color: "#3a5dfb",
-            cursor: current === 0 ? "not-allowed" : "pointer", fontSize: 20
-          }}
-        >{"‹"}</button>
-        <span style={{ minWidth: 56, textAlign: "center", fontWeight: 600 }}>
-          {current + 1} / {cards.length}
-        </span>
-        <button
-          disabled={current === cards.length - 1}
-          onClick={() => setCurrent(c => Math.min(cards.length - 1, c + 1))}
-          style={{
-            width: 32, height: 32, borderRadius: "50%",
-            border: "1.5px solid #bbb", background: "#fff", color: "#3a5dfb",
-            cursor: current === cards.length - 1 ? "not-allowed" : "pointer", fontSize: 20
-          }}
-        >{"›"}</button>
-        {/* 삭제 버튼 */}
-        {onDelete &&
-          <button
-            onClick={() => onDelete(currentCard.fileId)}
-            style={{
-              marginLeft: 24, background: "#ffeaea", color: "#e33",
-              border: "1.5px solid #e33", borderRadius: 8, fontWeight: 700,
-              fontSize: 15, padding: "4px 16px", cursor: "pointer"
-            }}
-          >삭제</button>
-        }
-        {/* 대표설정 */}
-        {onSetMain && mainFileId !== currentCard.fileId &&
-          <button
-            onClick={() => onSetMain(currentCard.fileId)}
-            style={{
-              marginLeft: 6, background: "#ebf2ff", color: "#4260ff",
-              border: "1.5px solid #3a5dfb", borderRadius: 8, fontWeight: 700,
-              fontSize: 15, padding: "4px 16px", cursor: "pointer"
-            }}
-          >대표로 설정</button>
-        }
-      </div>
+
+      <button
+        onClick={handleNext}
+        disabled={!canNext}
+        style={{
+          fontSize: 22,
+          background: "#fff",
+          border: "1px solid #ddd",
+          borderRadius: "50%",
+          width: 36, height: 36,
+          cursor: canNext ? "pointer" : "not-allowed",
+          opacity: canNext ? 1 : 0.3
+        }}
+      >&#8594;</button>
     </div>
   );
 }

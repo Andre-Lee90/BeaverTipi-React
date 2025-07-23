@@ -19,94 +19,79 @@ const textColors = [
   { code: "#d65f12", name: "오렌지" }
 ];
 
+const defaultTexts = [
+  { key: "bigTitle", value: "", fontSize: 24, pos: { x: 16, y: 20 } },
+  { key: "smallTitle", value: "", fontSize: 16, pos: { x: 16, y: 54 } },
+  { key: "content1", value: "", fontSize: 14, pos: { x: 16, y: 88 } },
+  { key: "content2", value: "", fontSize: 14, pos: { x: 16, y: 112 } },
+  { key: "content3", value: "", fontSize: 14, pos: { x: 16, y: 136 } }
+];
+
 export default function OfficeNameCard() {
   const [profiles, setProfiles] = useState([]);
   const [form, setForm] = useState({
-    bigTitle: "",
-    smallTitle: "",
-    content1: "",
-    content2: "",
-    content3: "",
     template: templates[0].id,
     bgImageUrl: "",
     textColor: "#222"
   });
-  const [editTarget, setEditTarget] = useState(null);
+  const [texts, setTexts] = useState(defaultTexts);
   const [refresh, setRefresh] = useState(false);
   const [mbrCd, setMbrCd] = useState("");
   const [nameCards, setNameCards] = useState([]);
   const [mainNameCardId, setMainNameCardId] = useState(null);
-  const [fontBigSize, setFontBigSize] = useState(24);
-  const [bigTitlePos, setBigTitlePos] = useState({ x: 16, y: 16 });
+
   const previewRef = useRef();
 
   useEffect(() => {
-    axios.get("/rest/broker/namecard/user").then(res => {
-      setMbrCd(res.data.mbrCd);
-    });
+    console.log("여기가시작이얌");
+    axios.get("/rest/broker/namecard/user").then(res => setMbrCd(res.data.mbrCd)
+    );
+    console.log("mbrCd를 찾아봐", mbrCd);
+    console.log("요청 주소:", `/rest/broker/namecard/list/${mbrCd}`);
+    
   }, []);
-
   useEffect(() => {
     if (mbrCd) {
       axios.get(`/rest/broker/namecard/list/${mbrCd}`).then(res => {
+        console.log("응답 데이터:", res.data);
         setNameCards(Array.isArray(res.data) ? res.data : []);
+        console.log("주소나오냐?", `/rest/broker/namecard/list/${mbrCd}`);
         const mainCard = (Array.isArray(res.data) ? res.data : []).find(card => card.docTypeCd === "NAMECARD_MAIN");
         setMainNameCardId(mainCard?.fileId || null);
       });
     }
   }, [mbrCd, refresh]);
 
-  // 삭제: Swal 적용
-  const handleDelete = async (fileId, fileAttachSeq) => {
-    const confirm = await Swal.fire({
-      title: '명함을 삭제할까요?',
-      text: '삭제하면 되돌릴 수 없어요.',
-      icon: 'warning',
-      showCancelButton: true,
-      confirmButtonText: '삭제',
-      cancelButtonText: '취소',
-      confirmButtonColor: '#d33'
-    });
-    if (!confirm.isConfirmed) return;
-
-    try {
-      const res = await axios.delete('/rest/broker/namecard/delete', {
-        params: { fileId, fileAttachSeq }
-      });
-      if (res.data.result === "success") {
-        await Swal.fire('삭제 완료!', '명함이 삭제되었습니다.', 'success');
-        setRefresh(v => !v);
-      } else {
-        Swal.fire('삭제 실패', res.data.message || '문제가 발생했어요', 'error');
+  // 텍스트 박스 추가/삭제
+  const handleAddText = () => {
+    setTexts(prev => [
+      ...prev,
+      {
+        key: `text${Date.now()}`,
+        value: "",
+        fontSize: 14,
+        pos: { x: 16, y: 160 + prev.length * 24 }
       }
-    } catch (e) {
-      Swal.fire('삭제 에러', e.message, 'error');
-    }
+    ]);
+  };
+  const handleRemoveText = idx => {
+    setTexts(prev => prev.filter((_, i) => i !== idx));
   };
 
-  // 대표명함 지정: Swal 적용
-  const handleSetMain = async (fileId) => {
-    if (!fileId) return;
-    try {
-      const res = await axios.post('/rest/broker/namecard/set-main', null, {
-        params: { nameCardId: fileId }
-      });
-      if (res.data.result === "success") {
-        await Swal.fire('대표명함!', '대표명함으로 지정되었습니다!', 'success');
-        setRefresh(v => !v);
-      } else {
-        Swal.fire('대표명함 지정 실패', res.data.message, 'error');
-      }
-    } catch (e) {
-      Swal.fire('대표명함 지정 오류', e.message, 'error');
-    }
+  // 텍스트 value 변경
+  const handleTextChange = (idx, value) => {
+    setTexts(prev => prev.map((t, i) => i === idx ? { ...t, value } : t));
+  };
+
+  // 텍스트 크기/위치 변경 (Preview에서 내려받음)
+  const handleTextFontSize = (idx, size) => {
+    setTexts(prev => prev.map((t, i) => i === idx ? { ...t, fontSize: size } : t));
+  };
+  const handleTextPos = (idx, pos) => {
+    setTexts(prev => prev.map((t, i) => i === idx ? { ...t, pos } : t));
   };
 
   // 입력/툴 핸들러
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setForm(prev => ({ ...prev, [name]: value }));
-  };
   const handleTemplate = (tid) => setForm(prev => ({ ...prev, template: tid, bgImageUrl: "" }));
   const handleBgUpload = (e) => {
     const file = e.target.files[0];
@@ -115,7 +100,8 @@ export default function OfficeNameCard() {
       bgImageUrl: URL.createObjectURL(file)
     }));
   };
-  // ⭐️ 프로필 여러장 업로드
+  const handleTextColor = (color) => setForm(prev => ({ ...prev, textColor: color }));
+  // 프로필
   const handleProfileUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -131,10 +117,8 @@ export default function OfficeNameCard() {
     ]);
     e.target.value = "";
   };
-  // ⭐️ 프로필 삭제
   const handleProfileDelete = idx =>
     setProfiles(prev => prev.filter((_, i) => i !== idx));
-  // ⭐️ 프로필 이동/크기/쉐입
   const handleProfileUpdate = (idx, data) =>
     setProfiles(prev => prev.map((p, i) => i === idx ? { ...p, ...data } : p));
   const handleProfileShape = shape => {
@@ -142,7 +126,7 @@ export default function OfficeNameCard() {
     setProfiles(prev => prev.map((p, i) => (i === prev.length - 1 ? { ...p, shape } : p)));
   };
 
-  // 저장: Swal 적용
+  // 저장/다운로드
   const handleSave = async () => {
     if (!previewRef.current) {
       await Swal.fire('오류', "미리보기 없음!", "error");
@@ -160,7 +144,6 @@ export default function OfficeNameCard() {
       formData.append("sourceRef", "BROKER");
       formData.append("sourceId", mbrCd);
       formData.append("docTypeCd", "NAMECARD");
-
       try {
         const res = await axios.post("/rest/broker/namecard/save", formData, {
           headers: { "Content-Type": "multipart/form-data" },
@@ -176,18 +159,9 @@ export default function OfficeNameCard() {
       }
     }, "image/png");
   };
-
-  const handleEdit = (card) => {
-    setForm({
-      ...form,
-      ...card
-    });
-    setEditTarget(card.fileId || null);
-  };
-
   const handleDownload = async () => {
     if (!previewRef.current) {
-      await Swal.fire('오류', "명함 미리보기 영역을 찾을 수 없습니다", "error");
+      await Swal.fire('오류', "명함 미리보기 없음!", "error");
       return;
     }
     const canvas = await html2canvas(previewRef.current);
@@ -197,6 +171,50 @@ export default function OfficeNameCard() {
     link.click();
   };
 
+  // 삭제/대표명함 지정
+  const handleDelete = async (fileId, fileAttachSeq) => {
+    const confirm = await Swal.fire({
+      title: '명함을 삭제할까요?',
+      text: '삭제하면 되돌릴 수 없어요.',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: '삭제',
+      cancelButtonText: '취소',
+      confirmButtonColor: '#d33'
+    });
+    if (!confirm.isConfirmed) return;
+    try {
+      const res = await axios.delete('/rest/broker/namecard/delete', {
+        params: { fileId, fileAttachSeq }
+      });
+      if (res.data.result === "success") {
+        await Swal.fire('삭제 완료!', '명함이 삭제되었습니다.', 'success');
+        setRefresh(v => !v);
+      } else {
+        Swal.fire('삭제 실패', res.data.message || '문제가 발생했어요', 'error');
+      }
+    } catch (e) {
+      Swal.fire('삭제 에러', e.message, 'error');
+    }
+  };
+  const handleSetMain = async (fileId) => {
+    if (!fileId) return;
+    try {
+      const res = await axios.post('/rest/broker/namecard/set-main', null, {
+        params: { nameCardId: fileId }
+      });
+      if (res.data.result === "success") {
+        await Swal.fire('대표명함!', '대표명함으로 지정되었습니다!', 'success');
+        setRefresh(v => !v);
+      } else {
+        Swal.fire('대표명함 지정 실패', res.data.message, 'error');
+      }
+    } catch (e) {
+      Swal.fire('대표명함 지정 오류', e.message, 'error');
+    }
+  };
+
+  // Input 스타일
   const grayInput = {
     width: 320,
     padding: "9px 12px",
@@ -233,29 +251,26 @@ export default function OfficeNameCard() {
         `}
       </style>
 
+      {/* 명함 미리보기 */}
       <div style={{ margin: "36px 0 28px 0" }}>
         <NameCardPreview
           ref={previewRef}
           width={360}
           height={200}
-          bigTitle={form.bigTitle}
-          smallTitle={form.smallTitle}
-          content1={form.content1}
-          content2={form.content2}
-          content3={form.content3}
-          color={templates.find(t => t.id === form.template)?.color}
           bgImage={form.bgImageUrl}
+          color={templates.find(t => t.id === form.template)?.color}
+          textColor={form.textColor}
           profiles={profiles}
           onProfileDelete={handleProfileDelete}
           onProfileUpdate={handleProfileUpdate}
-          textColor={form.textColor}
-          fontBigSize={fontBigSize}
-          onFontBigSizeChange={setFontBigSize}
-          bigTitlePos={bigTitlePos}
-          onBigTitlePosChange={setBigTitlePos}
+          texts={texts}
+          onTextFontSize={handleTextFontSize}
+          onTextPos={handleTextPos}
+          onRemoveText={handleRemoveText}
         />
       </div>
 
+      {/* 툴바 */}
       <div className="namecard-toolbar">
         <div className="namecard-toolbar__item">
           <span className="namecard-toolbar__label">명함색상</span>
@@ -296,19 +311,21 @@ export default function OfficeNameCard() {
             borderRadius: 6, width: 26, height: 26, marginLeft: 3, fontSize: 15
           }} onClick={() => handleProfileShape("rect")} title="사각">■</button>
         </div>
+        <div className="namecard-toolbar__item">
+          <button onClick={handleAddText} style={{
+            border: "1.5px solid #2e7d32",
+            color: "#2e7d32",
+            background: "#fff",
+            borderRadius: 6,
+            padding: "3px 13px",
+            fontWeight: 600,
+            fontSize: 14,
+            cursor: "pointer"
+          }}>텍스트 추가</button>
+        </div>
       </div>
 
-      <div style={{ marginBottom: 16, width: 350, display: "flex", gap: 16, alignItems: "center" }}>
-        <span style={{ fontWeight: 600, fontSize: 15 }}>텍스트 색상</span>
-        {textColors.map(tc => (
-          <button key={tc.code} style={{
-            width: 28, height: 28, background: tc.code,
-            border: form.textColor === tc.code ? "2.5px solid #4260ff" : "1.5px solid #bbb",
-            borderRadius: "50%", outline: "none", cursor: "pointer"
-          }} title={tc.name} onClick={() => handleTextColor(tc.code)} />
-        ))}
-      </div>
-
+      {/* 텍스트 입력 박스들 */}
       <div style={{
         display: "grid",
         gridTemplateColumns: "1fr 1fr",
@@ -316,11 +333,34 @@ export default function OfficeNameCard() {
         marginBottom: 14,
         width: 670
       }}>
-        <Input name="bigTitle" value={form.bigTitle} onChange={handleChange} style={grayInput} placeholder="큰제목 (이름 등)" maxLength={18} />
-        <Input name="smallTitle" value={form.smallTitle} onChange={handleChange} style={grayInput} placeholder="작은제목 (회사 등)" maxLength={18} />
-        <Input name="content1" value={form.content1} onChange={handleChange} style={grayInput} placeholder="내용1 (전화번호)" maxLength={24} />
-        <Input name="content2" value={form.content2} onChange={handleChange} style={grayInput} placeholder="내용2 (이메일/주소/직책 등)" maxLength={24} />
-        <Input name="content3" value={form.content3} onChange={handleChange} style={grayInput} placeholder="내용3 (이메일/주소/직책 등)" maxLength={24} />
+        {texts.map((t, idx) => (
+          <div key={t.key} style={{ display: "flex", alignItems: "center", gap: 7 }}>
+            <Input
+              value={t.value}
+              onChange={e => handleTextChange(idx, e.target.value)}
+              style={grayInput}
+              placeholder={`텍스트 ${idx + 1}`}
+              maxLength={24}
+            />
+            {texts.length > 1 &&
+              <button onClick={() => handleRemoveText(idx)}
+                style={{
+                  border: "none",
+                  background: "#fff",
+                  color: "#e33",
+                  fontWeight: 800,
+                  borderRadius: 8,
+                  width: 28,
+                  height: 28,
+                  cursor: "pointer",
+                  fontSize: 17,
+                  marginLeft: 0
+                }}
+                title="텍스트 삭제"
+              >×</button>
+            }
+          </div>
+        ))}
       </div>
 
       <div style={{
